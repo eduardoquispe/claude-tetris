@@ -1,0 +1,90 @@
+name: Claude Issue Triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Issue Triage
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--allowed-tools Bash(gh issue edit *),Bash(gh issue comment *),Bash(gh label create *),Bash(gh label list *)"
+          prompt: |
+            You are an issue triage assistant for this repository.
+
+            Issue number: ${{ github.event.issue.number }}
+            Issue title: ${{ github.event.issue.title }}
+            Issue body:
+            ${{ github.event.issue.body }}
+
+            Your tasks:
+
+            ## 1. Assign labels
+            First, list existing labels with:
+              gh label list --repo ${{ github.repository }} --json name
+
+            Then select all applicable labels from this predefined set. Create any missing ones before assigning:
+
+            | Label              | Color    | When to use                                          |
+            |--------------------|----------|------------------------------------------------------|
+            | bug                | #d73a4a  | Something is broken or behaves incorrectly           |
+            | enhancement        | #a2eeef  | New feature or improvement request                   |
+            | question           | #d876e3  | Needs clarification or is a question                 |
+            | documentation      | #0075ca  | Related to docs, README, or comments                 |
+            | performance        | #e4e669  | Slow behavior, frame drops, rendering lag            |
+            | ui/ux              | #f9d0c4  | Visual design or user experience issue               |
+            | gameplay           | #bfd4f2  | Game logic, mechanics, rules                         |
+            | good first issue   | #7057ff  | Simple enough for a first-time contributor           |
+            | invalid            | #e4e4e4  | Not a real issue or out of scope                     |
+            | wontfix            | #ffffff  | Acknowledged but will not be addressed               |
+
+            Create missing labels before assigning:
+              gh label create "<name>" --color "<hex>" --description "<desc>" --repo ${{ github.repository }} --force
+
+            Assign chosen labels:
+              gh issue edit ${{ github.event.issue.number }} --add-label "<label1>,<label2>" --repo ${{ github.repository }}
+
+            ## 2. Post a diagnostic comment
+            Post a single structured comment in the same language as the issue (detect it automatically):
+              gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body "<comment>"
+
+            The comment must follow this exact structure (adapt language to match the issue):
+
+            ---
+            ## 🔍 Diagnóstico automático
+
+            **Resumen del problema**
+            < One concise paragraph describing what the reporter is experiencing or requesting. >
+
+            **Área afectada**
+            < Which part of the codebase or feature is involved (e.g., rendering loop, scoring, controls, UI). >
+
+            **Impacto estimado**
+            `< Low | Medium | High >` — < One sentence explaining severity and who is affected. >
+
+            **Contexto técnico relevante**
+            < Any technical detail from the issue body (browser, device, steps to reproduce, error messages) that is relevant for a developer. Omit if not present. >
+
+            **Próximos pasos sugeridos**
+            - < Step 1 >
+            - < Step 2 >
+            - < Step 3 >
+
+            ---
+            *Diagnóstico generado automáticamente por Claude · Este análisis es un punto de partida, no una solución definitiva.*
+
+            Do not post any other comments. Do not modify issue title or body.
