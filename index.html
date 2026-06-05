@@ -52,6 +52,16 @@
             <span class="toggle-icon" id="theme-icon">☀️</span>
           </label>
         </div>
+
+        <div class="panel-section theme-selector">
+          <span class="label">Tema</span>
+          <div class="theme-buttons">
+            <button class="theme-btn active" data-theme="retro">Retro</button>
+            <button class="theme-btn" data-theme="neon">Neon</button>
+            <button class="theme-btn" data-theme="pastel">Pastel</button>
+            <button class="theme-btn" data-theme="pixel">Pixel</button>
+          </div>
+        </div>
       </aside>
     </div>
 
@@ -59,7 +69,38 @@
       <div class="overlay-box">
         <p id="overlay-title">GAME OVER</p>
         <p id="overlay-score"></p>
+        <div id="name-input-section" class="hidden">
+          <p>¡Entraste al top 5!</p>
+          <input type="text" id="player-name" placeholder="Tu nombre" maxlength="20" />
+          <button id="save-score-btn">Guardar</button>
+        </div>
+        <div id="scores-container"></div>
+        <button id="reset-scores-btn">Resetear records</button>
         <button id="restart-btn">Reiniciar</button>
+      </div>
+    </div>
+
+    <div id="pause-overlay" class="pause-overlay hidden">
+      <div class="pause-box">
+        <p class="pause-title">PAUSA</p>
+        <div class="pause-buttons">
+          <button id="resume-btn">Reanudar</button>
+          <button id="pause-restart-btn">Reiniciar</button>
+        </div>
+        <div class="pause-controls">
+          <span class="pause-controls-label">CONTROLES</span>
+          <ul>
+            <li><kbd>←</kbd><kbd>→</kbd> Mover</li>
+            <li><kbd>↑</kbd><kbd>X</kbd> Rotar</li>
+            <li><kbd>↓</kbd> Bajar</li>
+            <li><kbd>Space</kbd> Hard Drop</li>
+            <li><kbd>P</kbd><kbd>Esc</kbd> Pausa</li>
+          </ul>
+        </div>
+        <div class="pause-level-select">
+          <label for="start-level-select" class="pause-controls-label">NIVEL INICIAL (próxima partida)</label>
+          <select id="start-level-select"></select>
+        </div>
       </div>
     </div>
   </div>

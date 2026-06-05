@@ -4,17 +4,32 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK = 30;
 
-const COLORS = [
-  null,
-  '#4dd0e1', // I - cyan
-  '#ffd54f', // O - yellow
-  '#ba68c8', // T - purple
-  '#81c784', // S - green
-  '#e57373', // Z - red
-  '#42a5f5', // J - blue
-  '#ffb74d', // L - orange
-  '#b0bec5', // Tuerca - gris metálico
-];
+const THEMES = {
+  retro: {
+    colors: [null, '#4dd0e1', '#ffd54f', '#ba68c8', '#81c784', '#e57373', '#42a5f5', '#ffb74d', '#b0bec5'],
+    bg: '#1a1a2e',
+    grid: 'rgba(255,255,255,0.05)',
+  },
+  neon: {
+    colors: [null, '#00ffff', '#ffff00', '#ff00ff', '#00ff88', '#ff2244', '#4488ff', '#ff8800', '#aaaacc'],
+    bg: '#000000',
+    grid: 'rgba(0,255,255,0.08)',
+  },
+  pastel: {
+    colors: [null, '#b2ebf2', '#fff9c4', '#e1bee7', '#c8e6c9', '#ffcdd2', '#bbdefb', '#ffe0b2', '#cfd8dc'],
+    bg: '#fafafa',
+    grid: 'rgba(0,0,0,0.06)',
+  },
+  pixel: {
+    colors: [null, '#4dd0e1', '#ffd54f', '#ba68c8', '#81c784', '#e57373', '#42a5f5', '#ffb74d', '#b0bec5'],
+    bg: '#0d0d0d',
+    grid: 'rgba(255,255,255,0.04)',
+  },
+};
+
+let currentTheme = 'retro';
+
+function getThemeColors() { return THEMES[currentTheme].colors; }
 
 const PIECES = [
   null,
@@ -41,8 +56,53 @@ const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
 const overlayScore = document.getElementById('overlay-score');
 const restartBtn = document.getElementById('restart-btn');
+const nameInputSection = document.getElementById('name-input-section');
+const playerNameInput = document.getElementById('player-name');
+const saveScoreBtn = document.getElementById('save-score-btn');
+const scoresContainer = document.getElementById('scores-container');
+const resetScoresBtn = document.getElementById('reset-scores-btn');
+const pauseOverlay = document.getElementById('pause-overlay');
+const resumeBtn = document.getElementById('resume-btn');
+const pauseRestartBtn = document.getElementById('pause-restart-btn');
+const startLevelSelect = document.getElementById('start-level-select');
 
 let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
+let combo, maxCombo, maxLinesCleared;
+let startLevel = 1;
+
+const SCORES_KEY = 'tetris_scores';
+
+function loadScores() {
+  try { return JSON.parse(localStorage.getItem(SCORES_KEY)) || []; }
+  catch { return []; }
+}
+
+function saveScore(name, finalScore, finalLines, finalCombo) {
+  const scores = loadScores();
+  scores.push({ name, score: finalScore, lines: finalLines, combo: finalCombo });
+  scores.sort((a, b) => b.score - a.score);
+  scores.splice(5);
+  localStorage.setItem(SCORES_KEY, JSON.stringify(scores));
+  return scores;
+}
+
+function isTopScore(finalScore) {
+  const scores = loadScores();
+  return scores.length < 5 || finalScore >= scores[scores.length - 1].score;
+}
+
+function renderScores(container, currentScore) {
+  const scores = loadScores();
+  if (!scores.length) { container.innerHTML = '<p>No hay records aún.</p>'; return; }
+  let html = '<table class="scores-table"><thead><tr><th>#</th><th>Nombre</th><th>Puntos</th><th>Líneas</th><th>Combo</th></tr></thead><tbody>';
+  scores.forEach((s, i) => {
+    const isHighlight = currentScore !== undefined && s.score === currentScore;
+    const safeName = String(s.name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    html += `<tr class="${isHighlight ? 'highlight' : ''}"><td>${i + 1}</td><td>${safeName}</td><td>${s.score.toLocaleString()}</td><td>${s.lines}</td><td>${s.combo}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -108,9 +168,14 @@ function clearLines() {
   if (cleared) {
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level;
-    level = Math.floor(lines / 10) + 1;
+    level = Math.floor(lines / 10) + startLevel;
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
+    combo++;
+    if (combo > maxCombo) maxCombo = combo;
+    if (cleared > maxLinesCleared) maxLinesCleared = cleared;
     updateHUD();
+  } else {
+    combo = 0;
   }
 }
 
@@ -159,20 +224,63 @@ function updateHUD() {
   levelEl.textContent = level;
 }
 
+function shadeColor(hex, amount) {
+  const num = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, Math.max(0, (num >> 16) + amount));
+  const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + amount));
+  const b = Math.min(255, Math.max(0, (num & 0xff) + amount));
+  return `rgb(${r},${g},${b})`;
+}
+
 function drawBlock(context, x, y, colorIndex, size, alpha) {
   if (!colorIndex) return;
-  const color = COLORS[colorIndex];
+  const colors = getThemeColors();
+  const color = colors[colorIndex];
   context.globalAlpha = alpha ?? 1;
-  context.fillStyle = color;
-  context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-  // highlight
-  context.fillStyle = 'rgba(255,255,255,0.12)';
-  context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+
+  if (currentTheme === 'neon') {
+    context.shadowBlur = 12;
+    context.shadowColor = color;
+    context.fillStyle = color;
+    context.fillRect(x * size + 2, y * size + 2, size - 4, size - 4);
+    context.shadowBlur = 0;
+  } else if (currentTheme === 'pastel') {
+    const rr = 4, px = x * size + 1, py = y * size + 1, w = size - 2, h = size - 2;
+    context.fillStyle = color;
+    context.beginPath();
+    context.moveTo(px + rr, py);
+    context.lineTo(px + w - rr, py);
+    context.quadraticCurveTo(px + w, py, px + w, py + rr);
+    context.lineTo(px + w, py + h - rr);
+    context.quadraticCurveTo(px + w, py + h, px + w - rr, py + h);
+    context.lineTo(px + rr, py + h);
+    context.quadraticCurveTo(px, py + h, px, py + h - rr);
+    context.lineTo(px, py + rr);
+    context.quadraticCurveTo(px, py, px + rr, py);
+    context.closePath();
+    context.fill();
+    context.fillStyle = 'rgba(255,255,255,0.25)';
+    context.fillRect(px, py, w, 3);
+  } else if (currentTheme === 'pixel') {
+    const cell = Math.floor((size - 2) / 3);
+    for (let pr = 0; pr < 3; pr++) {
+      for (let pc = 0; pc < 3; pc++) {
+        context.fillStyle = (pr + pc) % 2 === 0 ? color : shadeColor(color, -20);
+        context.fillRect(x * size + 1 + pc * cell, y * size + 1 + pr * cell, cell - 1, cell - 1);
+      }
+    }
+  } else {
+    context.fillStyle = color;
+    context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
+    context.fillStyle = 'rgba(255,255,255,0.12)';
+    context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  }
+
   context.globalAlpha = 1;
 }
 
 function getGridColor() {
-  return getComputedStyle(document.documentElement).getPropertyValue('--grid-color').trim();
+  return THEMES[currentTheme].grid;
 }
 
 function drawGrid() {
@@ -196,19 +304,16 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGrid();
 
-  // board
   for (let r = 0; r < ROWS; r++)
     for (let c = 0; c < COLS; c++)
       drawBlock(ctx, c, r, board[r][c], BLOCK);
 
-  // ghost
   const gy = ghostY();
   for (let r = 0; r < current.shape.length; r++)
     for (let c = 0; c < current.shape[r].length; c++)
       if (current.shape[r][c])
         drawBlock(ctx, current.x + c, gy + r, current.shape[r][c], BLOCK, 0.2);
 
-  // current piece
   for (let r = 0; r < current.shape.length; r++)
     for (let c = 0; c < current.shape[r].length; c++)
       drawBlock(ctx, current.x + c, current.y + r, current.shape[r][c], BLOCK);
@@ -225,11 +330,30 @@ function drawNext() {
       drawBlock(nextCtx, offX + c, offY + r, shape[r][c], NB);
 }
 
+function applyTheme(name) {
+  currentTheme = name;
+  localStorage.setItem('tetris_theme', name);
+  const theme = THEMES[name];
+  document.documentElement.style.setProperty('--game-bg', theme.bg);
+  document.documentElement.style.setProperty('--grid-color', theme.grid);
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.theme === name);
+  });
+}
+
 function endGame() {
   gameOver = true;
   cancelAnimationFrame(animId);
   overlayTitle.textContent = 'GAME OVER';
   overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
+  nameInputSection.classList.add('hidden');
+  playerNameInput.value = '';
+  if (isTopScore(score)) {
+    nameInputSection.classList.remove('hidden');
+    playerNameInput.focus();
+  } else {
+    renderScores(scoresContainer, undefined);
+  }
   overlay.classList.remove('hidden');
 }
 
@@ -237,13 +361,12 @@ function togglePause() {
   if (gameOver) return;
   paused = !paused;
   if (!paused) {
+    pauseOverlay.classList.add('hidden');
     lastTime = performance.now();
     loop(lastTime);
   } else {
     cancelAnimationFrame(animId);
-    overlayTitle.textContent = 'PAUSA';
-    overlayScore.textContent = '';
-    overlay.classList.remove('hidden');
+    pauseOverlay.classList.remove('hidden');
   }
 }
 
@@ -267,23 +390,31 @@ function loop(ts) {
 function init() {
   board = createBoard();
   score = 0;
-  lines = 0;
-  level = 1;
   paused = false;
   gameOver = false;
-  dropInterval = 1000;
   dropAccum = 0;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
-  updateHUD();
   overlay.classList.add('hidden');
+  pauseOverlay.classList.add('hidden');
   cancelAnimationFrame(animId);
+  level = startLevel;
+  lines = 0;
+  dropInterval = Math.max(100, 1000 - (startLevel - 1) * 90);
+  updateHUD();
+  combo = 0; maxCombo = 0; maxLinesCleared = 0;
+
+  // --- THEMES ---
+  const savedTheme = localStorage.getItem('tetris_theme');
+  if (savedTheme && THEMES[savedTheme]) applyTheme(savedTheme);
+
+  renderScores(scoresContainer, undefined);
   animId = requestAnimationFrame(loop);
 }
 
 document.addEventListener('keydown', e => {
-  if (e.code === 'KeyP') { togglePause(); return; }
+  if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); return; }
   if (paused || gameOver) return;
   switch (e.code) {
     case 'ArrowLeft':
@@ -309,6 +440,32 @@ document.addEventListener('keydown', e => {
 
 restartBtn.addEventListener('click', init);
 
+saveScoreBtn.addEventListener('click', () => {
+  const name = playerNameInput.value.trim() || 'Anónimo';
+  saveScore(name, score, lines, maxCombo);
+  nameInputSection.classList.add('hidden');
+  renderScores(scoresContainer, score);
+});
+
+playerNameInput.addEventListener('keydown', e => {
+  if (e.code === 'Enter') saveScoreBtn.click();
+});
+
+resetScoresBtn.addEventListener('click', () => {
+  localStorage.removeItem(SCORES_KEY);
+  renderScores(scoresContainer);
+});
+
+for (let i = 1; i <= 15; i++) {
+  const opt = document.createElement('option');
+  opt.value = i; opt.textContent = i;
+  startLevelSelect.appendChild(opt);
+}
+
+resumeBtn.addEventListener('click', togglePause);
+pauseRestartBtn.addEventListener('click', init);
+startLevelSelect.addEventListener('change', e => { startLevel = +e.target.value; });
+
 const themeToggle = document.getElementById('theme-toggle');
 const themeIcon = document.getElementById('theme-icon');
 
@@ -322,4 +479,9 @@ themeToggle.addEventListener('change', () => {
   }
 });
 
+document.querySelectorAll('.theme-btn').forEach(btn => {
+  btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+});
+
+applyTheme(currentTheme);
 init();
