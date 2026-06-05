@@ -146,6 +146,7 @@ function spawn() {
   next = randomPiece();
   if (collide(current.shape, current.x, current.y)) {
     endGame();
+    return;
   }
   drawNext();
 }
@@ -256,6 +257,7 @@ function loop(ts) {
       lockPiece();
     }
   }
+  if (gameOver) return;
   draw();
   animId = requestAnimationFrame(loop);
 }
